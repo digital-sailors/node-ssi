@@ -206,34 +206,28 @@ SSI.prototype = {
                 isVirtual = RegExp.$1 == 'virtual';
                 basePath = (isVirtual && options.dirname && RegExp.$3.charAt(0) !== '/')? options.dirname : options.baseDir;
                 tpath = path.join(basePath, RegExp.$3);
-                fs.lstat(tpath,
-                    function(err, stats) {
-                        if (err) {
-                            return next(err);
-                        }
-                        if (stats.isDirectory()) {
-                            tpath = tpath.replace(/(\/)?$/, '/index.html');
-                        }
-                        fs.readFile(tpath, {
-                                encoding: options.encoding
-                            }, function(err, innerContentRaw) {
-                                if (err) {
-                                    return next(err);
-                                }
-                                // ensure that included files can include other files with relative paths
-                                subOptions = extend({}, options, {dirname: path.dirname(tpath)});
-                                ssi.resolveIncludes(innerContentRaw, subOptions, function(err, innerContent) {
-                                    if (err) {
-                                        return next(err);
-                                    }
-                                    content = content.slice(0, matches.index) + innerContent + content.slice(matches.index + seg.length);
-                                    next(null, content);
-                                });
-                            }
-                        );
-                    }
-                );
-
+                ssi.isDirectory(tpath, function(err, isDirectory) {
+                  if (err) {
+                    return next(err);
+                  }
+                  if (isDirectory) {
+                      tpath = tpath.replace(/(\/)?$/, '/index.html');
+                  }
+                  ssi.loadFile(tpath, options, function(err, innerContentRaw) {
+                      if (err) {
+                          return next(err);
+                      }
+                      // ensure that included files can include other files with relative paths
+                      subOptions = extend({}, options, {dirname: path.dirname(tpath)});
+                      ssi.resolveIncludes(innerContentRaw, subOptions, function(err, innerContent) {
+                          if (err) {
+                              return next(err);
+                          }
+                          content = content.slice(0, matches.index) + innerContent + content.slice(matches.index + seg.length);
+                          next(null, content);
+                      });
+                  });
+                });
             },
             function includesComplete(err) {
                 if (err) {
@@ -268,6 +262,34 @@ SSI.prototype = {
                 return callback(err);
             } else return ssi.compile(content, options, callback);
         });
+    },
+    /**
+     * Loads a file from the filesystem. Extension point to allow different sources for files
+     *
+     * @param  {String}   path
+     * @param  {Object}   options
+     * @param  {Function} callback
+     */
+    loadFile: function(path, options, callback) {
+      return fs.readFile(path, {
+              encoding: options.encoding
+          }, callback);
+
+    },
+    /**
+     * Checks if a file is a directory. Extension point to allow different sources for files
+     *
+     * @param  {String}   path
+     * @param  {Object}   options
+     * @param  {Function} callback
+     */
+    isDirectory: function(path, callback) {
+      fs.lstat(path, function(err, stats) {
+        if (err) {
+          return callback(err);
+        }
+        return callback(null, stats.isDirectory());
+      });
     }
 };
 
